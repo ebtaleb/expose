@@ -108,10 +108,6 @@
 \subsection{Pourquoi?}
 \frame{\frametitle{Pourquoi du déboguage natif?}
 
-%\begin{block}{This is a Block}
-  %This is important information
-%\end{block}
-
 \vspace{0.25cm}
 \begin{itemize}
 %oui je sais si possible deboguez votre code sans opts/en bytecode mais un bug peut apparaitre dans du code optimisé qui n'apparait pas dans le code
@@ -207,8 +203,6 @@ Développer/améliorer le prototype de débogueur natif OCaml : ocp-lldb
 
 Chaque type de données est placé dans une section dédiée dans le binaire
 
-%inserer listing?
-
 %je passe sur la repr binaire du format dwarf
 %j'expose ici les sections DWARF les plus importantes pour un debogueur
 
@@ -240,7 +234,6 @@ Chaque type de données est placé dans une section dédiée dans le binaire
 \item Racine est une unité de compilation (CU) <=> un fichier source compilé /objet
 %\item Compilation séparée : mise en commun des sections DWARF dans des sections communes au binaire final (linker)
 
-%exemple : listing
 \end{itemize}
 }
 
@@ -313,9 +306,9 @@ Inconvénients :
 
 \begin{enumerate}
 \item Modifications lourdes au compilateur
-\item Manque de precision, perte d'informations
+\item Manque de précision, perte d'informations
 % code subit encore des transformations/optimisations, est expansé puis réduit
-\item Valeurs disponibles au débug pas toujours cohérentes
+\item Valeurs disponibles pas toujours cohérentes
 \end{enumerate}
 
 \end{enumerate}
@@ -324,10 +317,18 @@ Inconvénients :
 \subsection{Emetteur DWARF}
 \frame{\frametitle{Emetteur DWARF}
 \begin{itemize}
-\item In \textbf{June}: ... (content omitted)
-\item In \textbf{July}: ... (content omitted)
-\item In \textbf{August}: ... (content omitted)
-\item In \textbf{September - November}: ... (content omitted)
+\item Fourni et développé par Mark Shinwell (Jane Street)
+\item Recupere les let-bindings presents dans les definitions de structures toplevel du module
+\item Deux passes supplémentaires dans le backend: available\_regs et available\_ranges
+% emploie tech d'analyse de flot de donnees en avant
+% available\_regs parcourt le CFG Mach d'une fonction et determine pour chaque ins manip  l'ens des regs avec un ident "disponibles",
+%cad dont la valeur peut etre inspectee par un debuggeur
+% available_ranges determine pour chaque variable/identifieur d'une fonction les intervalles ou sa valeur est disponible,
+% et pour chaque intervalle, le registre qui contient sa valeur
+\item ne capture pas les value bindings victimes d'optimisations
+% cst folding - reduction de constantes
+% Mark veut y remedier avec des let fantomes dans flambda
+%id unique conservé en cas de masquage de variable
 \end{itemize}
 }
 
@@ -355,9 +356,10 @@ Inconvénients :
 \subsection{Plugin LLDB}
 \frame{\frametitle{Plugin LLDB}
 \begin{enumerate}
-\item A ce stade, le binaire contient plus d'info...
+\item A ce stade, le binaire contient plus d'informations... \pause
+
 %plus d'endroits ou poser un point d'arrêt
-\item ...mais ces infos ne peuvent pas etre lues par LLDB
+\item ...qui ne peuvent pas etre lues par LLDB \pause
 % DWARF emis pas structure comme celui de C/C++, et
 % LLDB croit qu'il debugge du C
 \item Maintenant possible d'ajouter d'autres languages à LLDB
@@ -385,12 +387,11 @@ Inconvénients :
 \item Intégration de nouvelles commandes lldb en OCaml
 %structure des noeuds de l'ast/typedtree, types peuvent changer d'une version du compilateur a une autre
 \item Table de symboles
-\item Récuperer type associé à une variable et affiche sa valeur
+\item Récuperer le type associé à une variable et afficher sa valeur
 \end{enumerate}
 }
 
 \frame{\frametitle{Démonstration}
-%Demo time!
 }
 
 
