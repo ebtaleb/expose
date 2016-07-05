@@ -1,0 +1,32 @@
+digraph BST {
+    nodesep=0.4;
+    ranksep=0.5;
+    node [fontname="Arial"];
+    //"d.c" -> "long unsigned int";
+    //"d.c" -> "unsigned char";
+    //"d.c" -> "short unsigned int";
+    //"d.c" -> "unsigned int";
+    //"d.c" -> "signed char";
+    //"d.c" -> "short int";
+    "d.c" -> "int";
+    "d.c" -> "long int";
+    //"d.c" -> "sizetype";
+    //"d.c" -> "char";
+    "d.c" -> "do_stuff";
+    "d.c" -> "main";
+    //"long unsigned int";
+    //"unsigned char";
+    //"short unsigned int";
+    //"unsigned int";
+    //"signed char";
+    //"short int";
+    "int";
+    "long int";
+    //"sizetype";
+    //"char";
+    "do_stuff" -> "my_arg";
+    "do_stuff" -> "i";
+    "my_arg";
+    "i";
+    "main";
+}
