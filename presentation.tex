@@ -54,6 +54,9 @@
 \usepackage{hyperref}
 \usepackage{subfigure}
 
+\newcommand\pro{\item[$+$]}
+\newcommand\con{\item[$-$]}
+
 \lstset{
   %backgroundcolor=\color{white},   % choose the background color; you must add \usepackage{color} or \usepackage{xcolor}
   basicstyle=\footnotesize,        % the size of the fonts that are used for the code
@@ -114,7 +117,8 @@
 %non optimisé, du pas à pas ins par ins asm ca va deux minutes mais sur une appli très grande ca ne le fait pas
 \item Besoin de déboguer du code optimisé
 \item Pas (encore) de solution définitive/unifiée pour déboguer du code natif OCaml
-%Mark, libmonda se veut une librarie de debug natif OCaml agnostique au debugger
+% patchs, outils qui restent in
+%libmonda se veut une librarie de debug natif OCaml agnostique au debugger
 \end{itemize}
 \vspace{0.25cm}
 
@@ -159,15 +163,14 @@ Développer/améliorer le prototype de débogueur natif OCaml : ocp-lldb
 \section{DWARF}
 
 %transition
-% logique derriere deboguage au niveau du code source
+% raisons derriere deboguage au niveau du code source
 % - code asm ne conserve aucune des abstractions presentes dans le code source, ni dans l'AST, les IRs, aucun type
 % - optimisations peuvent transformer/deplacer des parties de code a travers le programme
 % - implique de grosses pertes d'information
 %pour pouvoir etablir correspondance entre source et code machine, on veut pouvoir
 % collecter toutes les infos utilisees dans la transformation du code source passe a un compilateur
-% (pblm : au niveau du backend, le code manipule peut ne plus rien a voir avec le code source d'origine) - si gen des info dbg
-%a ce niveau)
-% representer ces donnes dans un format adequat, de maniere concise et compacte, et suffisamment de details
+% (pblm : au niveau du backend, le code manipule peut ne plus rien a voir avec le code source d'origine) - si gen des info dbg a ce niveau)
+% representer ces donnees dans un format adequat, de maniere concise et compacte, et suffisamment de details
 
 \subsection{Présentation de DWARF}
 \frame{\frametitle{Présentation de DWARF (1)}
@@ -191,7 +194,7 @@ Développer/améliorer le prototype de débogueur natif OCaml : ocp-lldb
 \item Format d'information de données de déboguage
 \item Agnostique au language de programmation
 \item Agnostique aux compilateurs, assembleurs et debogueurs
-% fichier objet = code + metadata pour linking/debug/profile/stack unwind/relocation
+% fichier objet = code + metadonnees pour linking/debug/profile/stack unwind/relocation
 \item Agnostique au format de fichier objet
  %(même si utilisé le plus souvent avec ELF)
 \item Standardisé et extensible
@@ -221,16 +224,17 @@ Chaque type de données est placé dans une section dédiée dans le binaire
 \frame{\frametitle{Une section importante : .debug\_info}
 
 \begin{itemize}
-\item \item Entité de base : le DIE (Debugging Information Entry)
+\item Entité de base : le DIE (Debugging Information Entry)
 %entree d'info de debug
 \item DIE = un tag + ensemble d'attributs
 \item Un tag spécifie ce que le DIE represente (variable, portée lexicale, fonction, type)
+% quel construct est représenté ici
 
 \item Un attribut = couple de clé/valeur
 %(fst décrit ce qui est repr - un nom, une adresse, snd une valeur (peut etre un nombre, offset, adresse)
-\item Peut referencer d'autres entrées voire d'autres sections
+\item Peut réferencer d'autres entrées, voire d'autres sections
 
-\item les DIES peuvent etre imbriques dans d'autres DIES, formant une structure d'arbre
+\item Les DIES peuvent etre imbriqués dans d'autres DIES, formant une structure d'arbre
 \item Racine est une unité de compilation (CU) <=> un fichier source compilé /objet
 %\item Compilation séparée : mise en commun des sections DWARF dans des sections communes au binaire final (linker)
 
@@ -286,22 +290,24 @@ Chaque type de données est placé dans une section dédiée dans le binaire
 \frame{\frametitle{Propagation des évenements de déboguage (1)}
 \begin{enumerate}
 \item Problème : pas à pas dans le code source
-\item Necessaire aussi pour poser des breakpoints suivant fichier/num de ligne
-
 %Comment?
 % dans le code assembleur, présence de directives .loc
 %fichier - num de ligne - num de colonne
 %assembleur recupere les infos et l'offset et encode tout cela dans une structure dediée dans la section .debug\_line
+\item Nécessaire aussi pour poser des breakpoints suivant fichier/numéro de ligne
+
 \end{enumerate}
 }
 
 \frame{\frametitle{Propagation des évenements de déboguage (2)}
-\begin{enumerate}
+\begin{itemize}
 \item Idée : le bytecode ocaml contient des évenements de débug
     %(info de num de ligne/colonne/fichier)
 %\item Necessaire aussi pour poser des points d'arrêt suivant fichier/num de ligne
 \item Patch de Thomas Gazagnaire propage ces informations à travers le backend
 % patch porte de 3.12.1 a 4.02.1
+\item Concerne aussi assignations impératives et d'entiers
+% pattern matching qui renvoie None/[]
 Inconvénients :
 
 \begin{enumerate}
@@ -309,9 +315,10 @@ Inconvénients :
 \item Manque de précision, perte d'informations
 % code subit encore des transformations/optimisations, est expansé puis réduit
 \item Valeurs disponibles pas toujours cohérentes
+% csq du manque de precision
 \end{enumerate}
 
-\end{enumerate}
+\end{itemize}
 }
 
 \subsection{Emetteur DWARF}
@@ -319,6 +326,7 @@ Inconvénients :
 \begin{itemize}
 \item Fourni et développé par Mark Shinwell (Jane Street)
 \item Recupere les let-bindings presents dans les definitions de structures toplevel du module
+% prob pour injecter les types dans le dwarf, mais jamais vraiemnt mis en action?
 \item Deux passes supplémentaires dans le backend: available\_regs et available\_ranges
 % emploie tech d'analyse de flot de donnees en avant
 % available\_regs parcourt le CFG Mach d'une fonction et determine pour chaque ins manip  l'ens des regs avec un ident "disponibles",
@@ -326,36 +334,28 @@ Inconvénients :
 % available_ranges determine pour chaque variable/identifieur d'une fonction les intervalles ou sa valeur est disponible,
 % et pour chaque intervalle, le registre qui contient sa valeur
 \item ne capture pas les value bindings victimes d'optimisations
+\item Peuple les sections .debug\_info et .debug\_loc
 % cst folding - reduction de constantes
 % Mark veut y remedier avec des let fantomes dans flambda
 %id unique conservé en cas de masquage de variable
 \end{itemize}
 }
 
-%\subsection{Informations de type}
-%\frame{\frametitle{Informations de type}
-%\begin{enumerate}
-      %\begin{itemize}
-        %\item Predict flu rates (\emph{epidemics})
-        %\item Infer vote intensions (\emph{politics})
-        %\item Infer traffic/weather conditions (\emph{toy problems})
-            %\pause
-      %\end{itemize}
-%\vspace{0.25cm}
-%\item \textbf{Methodologies}?
-      %\begin{itemize}
-        %\item Feature extraction/selection
-        %\item Exploit probabilistic relationships (PGMs)
-        %\item Regression/classification/ranking scenarios
-        %\item Active learning
-      %\end{itemize}
-%\end{enumerate}
-%}
+\subsection{Informations de type}
+\frame{\frametitle{Informations de type}
+Fichier .cmt : arbre syntaxique typé sérialisé
+Ecriture dans le binaire
+\begin{itemize}
+\pro Plus pratique que un .cmt
+\con Taille plus importante du binaire
+\con Nécessite modification du compilateur
+\end{itemize}
+}
 
 \section{Déboguage sous LLDB}
 \subsection{Plugin LLDB}
 \frame{\frametitle{Plugin LLDB}
-\begin{enumerate}
+\begin{itemize}
 \item A ce stade, le binaire contient plus d'informations... \pause
 
 %plus d'endroits ou poser un point d'arrêt
@@ -369,7 +369,7 @@ Inconvénients :
 
 % eventuellement pouvoir evaluer expr dans ce language
 % pretty printing des valeurs et typage dynamique, ptes statiques ou dyn du language
-\end{enumerate}
+\end{itemize}
 }
 
 \frame{\frametitle{Plugin LLDB (2)}
@@ -382,12 +382,27 @@ Inconvénients :
 }
 
 \subsection{ocp-lldb}
+
+\frame{\frametitle{ocplib-lldb}
+\begin{enumerate}
+    \item Tire profit du front-end OCaml
+    \item Peut générer enumérations et API en OCaml
+    % parsant les fichiers headers -
+    %commande instances de lldb via liblldb
+    % majeure partie des enums et de l'API supportes, fonction statiques nope
+
+\end{enumerate}
+
+}
+
 \frame{\frametitle{ocp-lldb}
 \begin{enumerate}
-\item Intégration de nouvelles commandes lldb en OCaml
 %structure des noeuds de l'ast/typedtree, types peuvent changer d'une version du compilateur a une autre
-\item Table de symboles
+\item Ajout : Table de symboles
+% lit le typedtree serialise dans le binaire, l'explore et en extrait une structure d'arbre plus simple et compacte
 \item Récuperer le type associé à une variable et afficher sa valeur
+    %Grosso modo, avec le DWARF maintenant, en excluant les idents introduits plus tard dans les passes apres typedtree et les allocations, pourvu que j'ai les cmt, je peux reproduire l'effet des locids de memprofs
+    % debat selon cmt/types dans le dwarf, mais changements dans couche de debug dediee ocaml plus facile et maintenable que de modifier le compilateur
 \end{enumerate}
 }
 
@@ -408,6 +423,8 @@ Inconvénients :
 % en particulier le fork du compilateur avec support pour profiling memoire
 % devrait etre mis a disposition au public dans un futur plus ou moins proche
 % partie emission DWARF de MS et deboguage natif: peut etre pour 4.05
+\footnote{\url{https://github.com/mshinwell/libmonda}}
+\footnote{\url{https://github.com/ocaml/ocaml/pull/574}}
 \item Plugin LLDB OCaml et ocp-dwarf peuvent être rendus disponible
 % pour peu que la PR soit soumise
 % mais modifications moins maintenables et touchant plus au debugger lui meme que le plugin
