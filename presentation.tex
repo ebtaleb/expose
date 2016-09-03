@@ -85,7 +85,8 @@
   %title=\lstname                   % show the filename of files included with \lstinputlisting; also try caption instead of title
 }
 
-\title{Deboguage natif de code OCaml}
+\title{Déboguage de code natif OCaml sous LLDB}
+\subtitle{Master 2 STL - Soutenance de stage}
 \author{Elias Boutaleb}
 \institute{OCamlPro}
 \date{\today}
@@ -109,20 +110,26 @@
 
 \section{Introduction}
 \subsection{Pourquoi?}
-\frame{\frametitle{Pourquoi du déboguage natif?}
+
+\frame{\frametitle{Pourquoi?}
 
 \vspace{0.25cm}
+
+Pourquoi déboguer du code natif? \pause
+
 \begin{itemize}
-%oui je sais si possible deboguez votre code sans opts/en bytecode mais un bug peut apparaitre dans du code optimisé qui n'apparait pas dans le code
-%non optimisé
 \item Besoin de déboguer du code optimisé
-\item Pas (encore) de solution définitive/unifiée pour déboguer du code natif OCaml
-% patchs, outils qui restent in
-%libmonda se veut une librarie de debug natif OCaml agnostique au debugger
+%un bug peut apparaitre dans du code optimisé qui n'apparait pas dans sa version non optimisé
+\item Il n'y a pas encore de solution définitive pour déboguer du code natif OCaml
+% patchs, outils qui restent incomplets, limités, dispersés et non disponible au public
+\item Besoin d'un débogueur au niveau de la source
+% tous les devs ne peuvent pas forcement lire l'asm,  et parmi ceux qui peuvent,
+    % doit garder en tete du contexte sur l'archi
+    % utilisee et le runtime OCaml, en plus de cleui du programme
 \end{itemize}
 \vspace{0.25cm}
 
-Pourquoi sous LLDB?
+Pourquoi sous LLDB? \pause
 
 \vspace{0.25cm}
 \begin{itemize}
@@ -130,21 +137,36 @@ Pourquoi sous LLDB?
 %lldb ne sait meme pas qu'il debugge un binaire OCaml
 % MS s'occupe deja du support cote gdb
 \item ocplib-lldb : une liaison (binding) vers lldb en OCaml
-%gen auto faite en parsant les fichiers d'entetes C++, non parfaite mais une majeure partie des fonctions de l'API sont la
-\item Apple préfere LLVM à la toolchain GNU
+% pour profiter de cette lib
+%gen auto de liaison faite en parsant les entetes C++ de LLDB
+%\item Apple préfere LLVM à la toolchain GNU
 %(XCode utilise LLDB pour deboguer du ObjC et Swift)
+\end{itemize}
+}
+
+\frame{\frametitle{Choses à savoir concernant le code natif}
+\begin{itemize}
+    \item Le code machine ne conserve aucune abstraction
+        %presentes dans le code source, ni dans l'AST, les IRs, aucun type
+    \item Les optimisations peuvent transformer le programme
+        % plus difficile d'etablir correspondance entre une construction
+        % syntaxique dans le language source , ses IR et un ensemble d'ins en code natif
+    %\item Tout cela implique des pertes d'information
 \end{itemize}
 }
 
 \subsection{A l'heure actuelle}
 \frame{\frametitle{A l'heure actuelle}
+Il y a un support partiel pour le déboguage natif de code OCaml.
+
 \begin{itemize}
     \item Consultation de la pile d'appels de fonction
         %directives DWARF CFI permettent de la reconstruire
     \item Pas à pas partiel aux points d'entrée et d'appel de fonction
         %consequence du patch de thomasg qui propage les debug events du BC vers le backend natif
-    \item Memprof
-        % pour pister consommation memoire des progs, pour pouv permettre collection de ces infos, modification des entetes des blocs memoire et adjonction d'identifiants de location (type + place dans la source) depuis le compilateur
+    \item Profilage mémoire de programmes OCaml
+        % pour pister consommation memoire des progs, pour pouv permettre collection de ces infos, modification des entetes des blocs memoire
+        % dans memprof - compil fork par ocamlpro  fait adjonction d'identifiants de location (type + place dans la source) depuis le compilateur
         % possible d'interpreter val selon type et emplacement dans la source, quand cette valeur est encore vivante dans le tas
 \end{itemize}
 }
@@ -152,13 +174,13 @@ Pourquoi sous LLDB?
 \subsection{Objectifs du stage}
 \frame{\frametitle{Objectifs du stage}
 
-Développer/améliorer le prototype de débogueur natif OCaml ocp-lldb
 % améliorer l'experience de debug sous LLDB en general
 \begin{enumerate}
     \item Modifier le compilateur pour générer plus d'informations de déboguage
-        % emplacement des variables en memoire, correspondance entre suite d'ins asm et une ligne du code source
-        % info sous forme lisible par LLDB
-    \item Implanter les opérations classiques d'un débogueur
+        % emplacement des variables en memoire, ameliroer le pas a pas dans la
+        % source
+    \item Améliorer le prototype de débogueur natif OCaml ocp-lldb
+    % basé sur les bindings générés par ocplib-lldb
         % en utilisant les infos generes depuis le compilateur
         % affichage des valeurs de variables, pas a pas dans la source, placer points d'arret aux fcts et fichier/ligne
 \end{enumerate}
@@ -167,20 +189,12 @@ Développer/améliorer le prototype de débogueur natif OCaml ocp-lldb
 \section{DWARF}
 
 %transition
-% raisons derriere deboguage au niveau du code source
-% - code asm ne conserve aucune des abstractions presentes dans le code source, ni dans l'AST, les IRs, aucun type
-% - optimisations peuvent transformer/deplacer du code a travers le programme
-% - implique de grosses pertes d'information
 %pour pouvoir etablir correspondance entre source et code machine, on veut pouvoir
 % - collecter toutes les infos generees dans la transformation du code source passe a un compilateur
 % - representer ces donnees dans un format adequat, de maniere concise et compacte, et suffisamment de details
 
 \subsection{Présentation de DWARF}
 \frame{\frametitle{Présentation de DWARF (1)}
-
-%\begin{exampleblock}{This is an Example block}
-%This is an example
-%\end{exampleblock}
 
 \begin{columns}
     \begin{column}{0.48\textwidth}
@@ -194,44 +208,45 @@ Développer/améliorer le prototype de débogueur natif OCaml ocp-lldb
 \end{columns}
 
 \begin{itemize}
-\item Format d'information de données de déboguage
-%largement utilise aujourdhui
+\item Format d'informations de déboguage
+%les stocke, largement utilise aujourdhui
 \item Indépendant du language de programmation
 % peut representer et exprimer multitude de lang HL
 % C/Cpp/fortran/go/java
 \item Indépendant du compilateur/assembleur/debogueur
+%gcc/clang, gdb/lldb
 % fichier objet = code + metadonnees pour linking/debug/profile/stack unwind/relocation
 \item (Semi-)indépendant du format de fichier objet
- %(même si utilisé le plus souvent avec ELF)
+ %(même si utilisé le plus souvent en complement avec le format ELF)
 \item Standardisé et extensible
-% un comité receuille propositions d'extensions du std, mnt DWARF4
+% un comité recueille propositions d'extensions du std, suit evol des
+    % fonctionalites et des PLs,
 \end{itemize}
 }
 
 \frame{\frametitle{Présentation de DWARF (2)}
 
-Chaque type de données est placé dans une section dédiée dans le binaire
+Chaque type de données est placé dans une section dédiée dans le binaire.
 
 %je passe sur la repr binaire du format dwarf
 %j'expose ici les sections DWARF les plus importantes pour un debogueur
 
 \begin{itemize}
 \item .debug\_info: contient les informations principales DWARF
-\item .debug\_abbrev: abbreviations (signatures) utilisées pour décoder .debug\_info
+%\item .debug\_abbrev: "abbréviations" (signatures d'entrées) utilisées pour décoder .debug\_info
 % decrivent forme des records utilises dans debug_info
 \item .debug\_loc: listes de locations (emplacement des variables à l'exécution)
 % sur la pile (et dans le cas, quel offset),  dans un registre
 \item .debug\_line: table des numéros de ligne dans la source
 % etablit correspondance entre adresses memoires du code executable et les lignes du code source
 \end{itemize}
-
 }
 
 \frame{\frametitle{Une section importante : .debug\_info}
 
 \begin{itemize}
 \item Entité de base : le DIE (Debugging Information Entry)
-%entree d'info de debug
+%entree d'info de debug : enregistrement
 \item DIE = un tag + ensemble d'attributs
 \item Un tag spécifie ce que le DIE represente (variable, portée lexicale, fonction, type)
 % quel construct est représenté ici
@@ -241,7 +256,8 @@ Chaque type de données est placé dans une section dédiée dans le binaire
 \item Peut réferencer d'autres entrées, voire d'autres sections
 
 \item Les DIES peuvent etre imbriqués dans d'autres DIES, formant une structure d'arbre
-\item Racine est une unité de compilation (CU) <=> un fichier source compilé /objet
+\item Une unité de compilation (CU) <=> un fichier source compilé /objet
+    % c'est aussi une entree qui constitue la racine
 %\item Compilation séparée : mise en commun des sections DWARF dans des sections communes au binaire final (linker)
 
 \end{itemize}
@@ -277,12 +293,14 @@ Chaque type de données est placé dans une section dédiée dans le binaire
 
 % vous pouvez voir que ce format n'est pas sense etre lu par des humains
 
-\subsection{ocp-dwarf}
-\frame{\frametitle{ocp-dwarf}
+\subsection{ocplib-dwarf}
+\frame{\frametitle{ocplib-dwarf}
 \begin{itemize}
 \item Bibliothèque de lecture et d'affichage d'informations DWARF
 %sortie similaire a objdump
-\item Offre une abstraction permettant de manipuler les structures de données%
+\item Offre une abstraction permettant de manipuler les structures de données
+    % utilise des zippers de forets (Gerard Huet) dont chaque noeud contine une liste de sous
+    % arbres - acces constant amorti en moyenne
 \item Ecriture et édition restent à faire
 % meme si cette tache est deleguee aux compilateurs
 \end{itemize}
@@ -294,57 +312,59 @@ Chaque type de données est placé dans une section dédiée dans le binaire
 \section{Ajouts faits au compilateur natif}
 \subsection{Propagation des évenements de déboguage}
 \frame{\frametitle{Propagation des évenements de déboguage (1)}
-\begin{enumerate}
-\item Problème : pas à pas dans le code source
-%Comment?
-% dans le code assembleur, présence de directives .loc
-%fichier - num de ligne - num de colonne
-%assembleur recupere les infos et l'offset et encode tout cela dans une structure dediée dans la section .debug\_line
-\item Nécessaire aussi pour poser des breakpoints suivant fichier/numéro de ligne
+    \begin{itemize}
+\item On veut améliorer le pas à pas dans le code source
+    % pas seulement aux appels de fonctions, mais aussi dans des assignations
+    % (ref mutables ou pas), branches
+\item Nécessaire pour poser des points d'arrêt suivant fichier et numéro de ligne
+\item Comment?
+    \begin{itemize}
+        \item Dans le code assembleur, présence de directives .loc
+    \end{itemize}
+    %fichier - num de ligne - num de colonne
+    %assembleur recupere les infos et l'offset et encode tout cela dans une structure dediée dans la section .debug\_line
 
-\end{enumerate}
+\end{itemize}
 }
 
 \frame{\frametitle{Propagation des évenements de déboguage (2)}
 \begin{itemize}
-\item Idée : le bytecode ocaml contient des évenements de débug
+\item Le bytecode OCaml contient des évenements de déboguage
     %(info de num de ligne/colonne/fichier)
-%\item Necessaire aussi pour poser des points d'arrêt suivant fichier/num de ligne
-\item Patch de Thomas Gazagnaire propage ces informations à travers le backend
-% patch porte de 3.12.1 a 4.02.1
-\item Concerne aussi assignations impératives et d'entiers
-% pattern matching qui renvoie None/[]
-Inconvénients :
+\item Idée : propager ces informations à travers le backend
+% patch de tg porte de 3.12.1 a 4.02.1
+% emballer chaque noeud des IRs dans un enregistrement polymorphique avec un
+    % champ d'info de ligne
+\item Affecte les assignations non-constantes, les entiers et certaines primitives
+% assignation, comparaisons lors de test, allocation
 
+\item Inconvénients :
 \begin{enumerate}
-\item Modifications lourdes du compilateur
+\con Modifications lourdes du compilateur
 % languages des passes backend natif n'a pas prevu pour l'adjonction d'info de debug
-\item Manque de précision, perte d'informations
+\con Manque de précision, perte d'informations
 % code subit encore des transformations/optimisations, est expansé puis réduit
-\item Valeurs disponibles pas toujours cohérentes
 % csq du manque de precision
 \end{enumerate}
 
 \end{itemize}
 }
 
-\subsection{Emetteur DWARF}
-\frame{\frametitle{Emetteur DWARF}
+\subsection{Accès aux variables à l'éxecution}
+\frame{\frametitle{Accès aux variables à l'éxecution}
 \begin{itemize}
-\item Fourni et développé par Mark Shinwell (Jane Street)
-\item Recupere les let-bindings presents dans les modules
-% prob pour injecter les types dans le dwarf, mais jamais vraiemnt mis en action?
 \item Deux passes supplémentaires dans le backend: available\_regs et available\_ranges
 % emploie tech d'analyse de flot de donnees en avant
-% available\_regs parcourt le CFG Mach d'une fonction et determine pour chaque ins manip  l'ens des regs avec un ident "disponibles",
+% available\_regs parcourt le CFG Mach d'une fonction et determine pour chaque ins manip/l'ins courante  l'ens des regs avec un ident "disponibles",
 %cad dont la valeur peut etre inspectee par un debuggeur
 % available_ranges determine pour chaque variable/identifieur d'une fonction les intervalles ou son contenu est disponible,
 % et pour chaque intervalle, le registre qui contient cette valeur
-\item Ne capture pas les value bindings victimes d'optimisations
+\item Ne capturent pas les variables victimes d'optimisations
 % cst folding - reduction de constantes
 % Mark veut y remedier avec des let fantomes dans flambda
-\item Peuple les sections .debug\_info et .debug\_loc
-
+\item Un emetteur DWARF peuple les sections .debug\_info et .debug\_loc
+\item Valeurs disponibles pas toujours cohérentes
+\item Fourni et développé par Mark Shinwell (Jane Street)
 %id unique conservé en cas de masquage de variable
 \end{itemize}
 }
@@ -352,67 +372,65 @@ Inconvénients :
 \subsection{Informations de type}
 \frame{\frametitle{Informations de type}
 \begin{itemize}
-    \item Fichier .cmt : arbre syntaxique typé sérialisé \\
-    \item Ecriture dans le binaire
+    \item L'arbre syntaxique typé peut être sérialisé dans un fichier .cmt\\
+    \item Ecriture dans le binaire en tant que symbole
 \end{itemize}
 
-\begin{itemize}
-\pro Plus pratique que de manipuler les cmts
-\con Taille plus importante du binaire
-\con Nécessite modification du compilateur
-\end{itemize}
+%\begin{itemize}
+%\pro Plus pratique que de manipuler les fichiers .cmt
+%\con Taille plus importante du binaire
+%\con Nécessite modification du compilateur
+%\end{itemize}
 }
 
 \section{Déboguage sous LLDB}
-\subsection{Plugin LLDB}
-\frame{\frametitle{Plugin LLDB}
+\subsection{Plugin LLDB pour OCaml}
+\frame{\frametitle{Plugin LLDB pour OCaml (1)}
 \begin{itemize}
 \item A ce stade, le binaire contient plus d'informations... \pause
-
 %plus d'endroits ou poser un point d'arrêt
-\item ...qui ne peuvent pas etre lues par LLDB \pause
+\item ...qui ne peuvent pas être lues par LLDB \pause
 % DWARF emis pas structure comme celui de C/C++, et
 % LLDB croit qu'il debugge du C
 \item Maintenant possible d'ajouter d'autres languages à LLDB
-% depuis un peu moins d'un an, chgmts faits a LLDB pour pouvoir supporter d'autres languages que ceux supportes par clang
+% depuis un an, chgmts faits a LLDB pour pouvoir supporter d'autres languages que ceux supportes par clang
 % il suffit d'ecrire des classes impl certaines interfaces
 % ajouter le language cible dans un enum
-
 % eventuellement pouvoir evaluer expr dans ce language
 % pretty printing des valeurs et typage dynamique, ptes statiques ou dyn du language
 \end{itemize}
 }
 
-\frame{\frametitle{Plugin LLDB (2)}
+\frame{\frametitle{Plugin LLDB pour OCaml (2) - Contenu}
 \begin{itemize}
-\item Parseur DWARF
-\item Système de type minimal
+\item Un parseur d'informations DWARF personalisé
+\item Un système de type minimal
 %(toutes les valeurs sont des entiers 64 bits, leur eval est laissee a ocp-lldb)
-\item Démanglage des symboles
+\item Supporte le démanglage des symboles
 \end{itemize}
 }
 
-\subsection{ocp-lldb}
+\subsection{Ajouts faits à ocp-lldb}
 
-\frame{\frametitle{ocplib-lldb}
-ocplib-lldb \\
+\frame{\frametitle{Ajouts faits à ocp-lldb}
+La bibliothèque ocplib-lldb \\
 
 \begin{itemize}
     \item Tire profit du front-end OCaml
     %structure des noeuds de l'ast/typedtree, types peuvent changer d'une version du compilateur a une autre
-    \item Peut générer enumérations et API en OCaml
-    % parsant les fichiers headers -
-    %commande instances de lldb via liblldb
+    % debat selon cmt/types dans le dwarf, mais changements dans couche de debug dediee ocaml plus facile et maintenable que de modifier le compilateur
+    \item Peut générer une liaison avec l'API de LLDB en OCaml
+    % parsant les entetes C++ definissant lAPI de la librarie liblldb qui
+    % permet de commander instances de lldb via liblldb
     % majeure partie des enums et de l'API supportes, fonction statiques nope
+    % acces aux objets se fait via la FFI
 \end{itemize}
 
-ocp-lldb
+Le débogueur ocp-lldb
 \begin{itemize}
-\item Ajout : Table de symboles
+\item Une table de symboles est construite à partir de l'arbre syntaxique typé
 % lit le typedtree serialise dans le binaire, l'explore et en extrait une structure d'arbre plus simple et compacte
-\item Récuperer le type associé à une variable et afficher sa valeur
-    %Grosso modo, avec le DWARF maintenant, en excluant les idents introduits plus tard dans les passes apres typedtree et les allocations, pourvu que j'ai les cmt, je peux reproduire l'effet des locids de memprofs
-    % debat selon cmt/types dans le dwarf, mais changements dans couche de debug dediee ocaml plus facile et maintenable que de modifier le compilateur
+\item Peut récuperer le type associé à un identifiant et afficher sa valeur
 \end{itemize}
 
 }
@@ -427,37 +445,42 @@ ocp-lldb
 
 \section*{Conclusion}
 
-\frame{\frametitle{Etat actuel du projet}
-\begin{enumerate}
-\item Systèmes visés: Linux x86 64 bits
-\item Plupart des outils encore non disponible au public
-% en particulier le fork du compilateur avec support pour profiling memoire
-% devrait etre mis a disposition au public dans un futur plus ou moins proche
-\item Emission DWARF 
-\footnote{\url{https://github.com/mshinwell/libmonda}}
+\frame{\frametitle{Conclusion}
+
+Etat actuel du projet
+
+\begin{itemize}
+\item Systèmes visés pour l'instant : Linux x86 64 bits
+\item Modifications du compilateur bientôt disponible au public
+% dans un futur plus ou moins proche
+\item Emission DWARF
 \footnote{\url{https://github.com/ocaml/ocaml/pull/574}}
 %de MS et deboguage natif: peut etre pour 4.05
-% amelioration faites depuis 4.02 concernent surtout flambda
-\item Plugin LLDB OCaml et ocp-dwarf peuvent être rendus disponible
-% pour peu que la PR soit soumise
-% mais modifications moins maintenables et touchant plus au debugger lui meme que le plugin
-% compilateur reste a reste modifie en consequence
-\item ocp-lldb déjà disponible
-%mais necessite fork avec memprof
-%la branche sur laquelle je travaille necessite un autre fork encore avec mes ajouts
+% amelioration faites depuis 4.02 concernent surtout flambda et gdb
+\item Le plugin LLDB pour OCaml a intégré LLDB
+% il reste encore deux patchs a integrer
+% cela reste en suspend, demanglage dependra de comment MS veut implanter cela
+\item ocp-lldb et ocp-dwarf sont disponibles
+    %mais necessite mes modifs
+\end{itemize}
 
-% Challenges et difficultes
-%\item Augmenter le nombre de dbg events/locations
+Difficultés
+
+\begin{itemize}
+\item Augmenter le nombre d'évenements de déboguage
+\item Améliorer leur précision
 % chronophage car precision de methode naive + temps de compilation de la compiler suite
 % comment faire composer les differents constructs ensemble
+% insertion des events, mais le code/IR subit encore des transformations
 % Modifications entre debugger et compiler
-\end{enumerate}
+\end{itemize}
 }
 
 \frame{\frametitle{Fin}
     \begin{center}
-        \huge
-        Des questions?
+        \huge Merci de votre attention! \\
+        \vspace{0.25cm}
+        \huge Avez-vous des questions?
     \end{center}
 }
 
